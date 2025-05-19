@@ -11,8 +11,9 @@ from xgboost import XGBClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 
 # ---- SETUP ----
-st.set_page_config(page_title="Air Quality Dashboard", layout="wide")
-st.title("🌍 Air Pollution Analysis & Prediction")
+st.set_page_config(page_title="Predicting the Air Quality Level", layout="wide")
+st.title("🌍 Predicting the Air Quality Level")
+st.write("A dashboard for analyzing air pollution data and predicting pollutant types using machine learning.")
 
 # ---- LOAD DATA ----
 @st.cache_data
@@ -23,6 +24,10 @@ def load_data():
 
 df = load_data()
 st.success("✅ Dataset loaded successfully!")
+
+# Show sample data
+st.subheader("Sample Data")
+st.dataframe(df.head())
 
 # ---- ENCODE DATA ----
 def encode_data(df):
@@ -50,7 +55,7 @@ def train_models(df, target_column='pollutant_id'):
     rf_model.fit(X_train_scaled, y_train)
     rf_preds = rf_model.predict(X_test_scaled)
 
-    xgb_model = XGBClassifier(n_estimators=100, learning_rate=0.1, eval_metric='mlogloss')
+    xgb_model = XGBClassifier(n_estimators=100, learning_rate=0.1, eval_metric='mlogloss', use_label_encoder=False)
     xgb_model.fit(X_train_scaled, y_train)
     xgb_preds = xgb_model.predict(X_test_scaled)
 
@@ -58,7 +63,8 @@ def train_models(df, target_column='pollutant_id'):
         "rf": (rf_model, rf_preds),
         "xgb": (xgb_model, xgb_preds),
         "y_test": y_test,
-        "X_columns": X.columns
+        "X_columns": X.columns,
+        "scaler": scaler
     }
 
 with st.spinner("Training models..."):
@@ -128,13 +134,14 @@ def calculate_aqi_pm25(pm25):
     elif pm25 <= 250: return 300 + ((pm25 - 120) * 100) / 130
     else: return 400 + ((pm25 - 250) * 100) / 130
 
-st.header("🧮 AQI Analysis")
-
+# Use original df to filter before encoding for AQI calc
 pm10_data = df[df['pollutant_id'] == 'PM10'].copy()
 pm10_data['AQI'] = pm10_data['pollutant_avg'].apply(calculate_aqi_pm10)
 
 pm25_data = df[df['pollutant_id'] == 'PM2.5'].copy()
 pm25_data['AQI'] = pm25_data['pollutant_avg'].apply(calculate_aqi_pm25)
+
+st.header("🧮 AQI Analysis")
 
 for data, label in zip([pm10_data, pm25_data], ['PM10', 'PM2.5']):
     if not data.empty:
@@ -144,7 +151,38 @@ for data, label in zip([pm10_data, pm25_data], ['PM10', 'PM2.5']):
         ax_aqi.set_title(f'{label} Concentration vs AQI')
         st.pyplot(fig_aqi)
 
-# ---- USER INPUT (Optional: Add prediction form here) ----
-st.header("🧾 Predict Pollutant Type (Coming soon...)")
-st.info("Interactive input for custom predictions can be added. Let me know if you'd like that now.")
+# ---- USER INPUT FORM FOR PREDICTION ----
+st.header("🧾 Predict Pollutant Type")
 
+with st.form("predict_form"):
+    st.write("Enter pollutant parameters:")
+    input_features = {}
+    for col in df.columns:
+        if col != 'pollutant_id' and df[col].dtype in [np.float64, np.int64]:
+            val = st.number_input(f"{col}", value=float(df[col].mean()))
+            input_features[col] = val
+
+    submitted = st.form_submit_button("Predict")
+
+if submitted:
+    input_df = pd.DataFrame([input_features])
+
+    # Scale inputs using the same scaler used during training
+    scaler = models['scaler']
+    input_scaled = scaler.transform(input_df)
+
+    # Predict with both models
+    rf_pred = models['rf'][0].predict(input_scaled)[0]
+    xgb_pred = models['xgb'][0].predict(input_scaled)[0]
+
+    # Decode label back to pollutant name
+    if 'pollutant_id' in label_encoders:
+        le = label_encoders['pollutant_id']
+        pollutant_label_rf = le.inverse_transform([rf_pred])[0]
+        pollutant_label_xgb = le.inverse_transform([xgb_pred])[0]
+    else:
+        pollutant_label_rf = str(rf_pred)
+        pollutant_label_xgb = str(xgb_pred)
+
+    st.success(f"Random Forest Prediction: {pollutant_label_rf}")
+    st.success(f"XGBoost Prediction: {pollutant_label_xgb}")
