@@ -10,12 +10,12 @@ from xgboost import XGBClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 
 def load_and_clean_data():
-    df = pd.read_csv("Pollutant_Radar.csv")  # ✅ Directly loading your dataset
+    df = pd.read_csv("Pollutant_Radar.csv")  # Load your dataset
     df.dropna(inplace=True)
 
     label_encoders = {}
     for col in df.select_dtypes(include=['object']).columns:
-        if col != 'pollutant_id':  # Keep pollutant_id original for plotting later
+        if col != 'pollutant_id':  # Exclude target for now
             le = LabelEncoder()
             df[col] = le.fit_transform(df[col])
             label_encoders[col] = le
@@ -41,6 +41,7 @@ def train_models(df, target_column='pollutant_id'):
     rf_model.fit(X_train_scaled, y_train)
     rf_preds = rf_model.predict(X_test_scaled)
 
+    # ✅ Clean version without deprecated parameter
     xgb_model = XGBClassifier(n_estimators=100, learning_rate=0.1, eval_metric='mlogloss')
     xgb_model.fit(X_train_scaled, y_train)
     xgb_preds = xgb_model.predict(X_test_scaled)
@@ -134,7 +135,7 @@ def plot_aqi():
             plt.tight_layout()
             plt.show()
 
-# Main script
+# Main execution
 if __name__ == "__main__":
     df, label_encoders = load_and_clean_data()
     train_models(df, target_column='pollutant_id')
