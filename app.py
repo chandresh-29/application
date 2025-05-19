@@ -15,21 +15,23 @@ st.set_page_config(page_title="Predicting the Air Quality Level", layout="wide")
 st.title("🌍 Predicting the Air Quality Level")
 st.write("A dashboard for analyzing air pollution data and predicting pollutant types using machine learning.")
 
-# ---- LOAD DATA ----
+# ---- LOAD DATA WITH ERROR HANDLING ----
 @st.cache_data
 def load_data():
     df = pd.read_csv("Pollutant_Radar.csv")
     df.dropna(inplace=True)
     return df
 
-df = load_data()
-st.success("✅ Dataset loaded successfully!")
+try:
+    df = load_data()
+    st.success("✅ Dataset loaded successfully!")
+    st.write("### Sample Data")
+    st.dataframe(df.head())
+except Exception as e:
+    st.error(f"Error loading data: {e}")
+    st.stop()
 
-# Show sample data
-st.subheader("Sample Data")
-st.dataframe(df.head())
-
-# ---- ENCODE DATA ----
+# ---- ENCODE DATA WITH ERROR HANDLING ----
 def encode_data(df):
     encoders = {}
     for col in df.select_dtypes(include='object').columns:
@@ -38,9 +40,13 @@ def encode_data(df):
         encoders[col] = le
     return df, encoders
 
-encoded_df, label_encoders = encode_data(df.copy())
+try:
+    encoded_df, label_encoders = encode_data(df.copy())
+except Exception as e:
+    st.error(f"Error encoding data: {e}")
+    st.stop()
 
-# ---- MODEL TRAINING ----
+# ---- MODEL TRAINING WITH ERROR HANDLING ----
 def train_models(df, target_column='pollutant_id'):
     X = df.drop(columns=[target_column])
     y = df[target_column]
@@ -67,8 +73,12 @@ def train_models(df, target_column='pollutant_id'):
         "scaler": scaler
     }
 
-with st.spinner("Training models..."):
-    models = train_models(encoded_df)
+try:
+    with st.spinner("Training models..."):
+        models = train_models(encoded_df)
+except Exception as e:
+    st.error(f"Error training models: {e}")
+    st.stop()
 
 # ---- EVALUATION ----
 st.header("🔍 Model Performance")
@@ -134,12 +144,14 @@ def calculate_aqi_pm25(pm25):
     elif pm25 <= 250: return 300 + ((pm25 - 120) * 100) / 130
     else: return 400 + ((pm25 - 250) * 100) / 130
 
-# Use original df to filter before encoding for AQI calc
-pm10_data = df[df['pollutant_id'] == 'PM10'].copy()
-pm10_data['AQI'] = pm10_data['pollutant_avg'].apply(calculate_aqi_pm10)
+try:
+    pm10_data = df[df['pollutant_id'] == 'PM10'].copy()
+    pm10_data['AQI'] = pm10_data['pollutant_avg'].apply(calculate_aqi_pm10)
 
-pm25_data = df[df['pollutant_id'] == 'PM2.5'].copy()
-pm25_data['AQI'] = pm25_data['pollutant_avg'].apply(calculate_aqi_pm25)
+    pm25_data = df[df['pollutant_id'] == 'PM2.5'].copy()
+    pm25_data['AQI'] = pm25_data['pollutant_avg'].apply(calculate_aqi_pm25)
+except Exception as e:
+    st.warning(f"Warning: Could not calculate AQI data: {e}")
 
 st.header("🧮 AQI Analysis")
 
@@ -165,24 +177,27 @@ with st.form("predict_form"):
     submitted = st.form_submit_button("Predict")
 
 if submitted:
-    input_df = pd.DataFrame([input_features])
+    try:
+        input_df = pd.DataFrame([input_features])
 
-    # Scale inputs using the same scaler used during training
-    scaler = models['scaler']
-    input_scaled = scaler.transform(input_df)
+        # Scale inputs using the same scaler used during training
+        scaler = models['scaler']
+        input_scaled = scaler.transform(input_df)
 
-    # Predict with both models
-    rf_pred = models['rf'][0].predict(input_scaled)[0]
-    xgb_pred = models['xgb'][0].predict(input_scaled)[0]
+        # Predict with both models
+        rf_pred = models['rf'][0].predict(input_scaled)[0]
+        xgb_pred = models['xgb'][0].predict(input_scaled)[0]
 
-    # Decode label back to pollutant name
-    if 'pollutant_id' in label_encoders:
-        le = label_encoders['pollutant_id']
-        pollutant_label_rf = le.inverse_transform([rf_pred])[0]
-        pollutant_label_xgb = le.inverse_transform([xgb_pred])[0]
-    else:
-        pollutant_label_rf = str(rf_pred)
-        pollutant_label_xgb = str(xgb_pred)
+        # Decode label back to pollutant name
+        if 'pollutant_id' in label_encoders:
+            le = label_encoders['pollutant_id']
+            pollutant_label_rf = le.inverse_transform([rf_pred])[0]
+            pollutant_label_xgb = le.inverse_transform([xgb_pred])[0]
+        else:
+            pollutant_label_rf = str(rf_pred)
+            pollutant_label_xgb = str(xgb_pred)
 
-    st.success(f"Random Forest Prediction: {pollutant_label_rf}")
-    st.success(f"XGBoost Prediction: {pollutant_label_xgb}")
+        st.success(f"Random Forest Prediction: {pollutant_label_rf}")
+        st.success(f"XGBoost Prediction: {pollutant_label_xgb}")
+    except Exception as e:
+        st.error(f"Prediction error: {e}")
