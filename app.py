@@ -41,7 +41,7 @@ def train_models(df, target_column='pollutant_id'):
     rf_model.fit(X_train_scaled, y_train)
     rf_preds = rf_model.predict(X_test_scaled)
 
-    xgb_model = XGBClassifier(n_estimators=100, learning_rate=0.1, use_label_encoder=False, eval_metric='mlogloss')
+    xgb_model = XGBClassifier(n_estimators=100, learning_rate=0.1, eval_metric='mlogloss')
     xgb_model.fit(X_train_scaled, y_train)
     xgb_preds = xgb_model.predict(X_test_scaled)
 
